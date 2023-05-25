@@ -105,10 +105,10 @@ MonoBehaviour:
   fireRate: 0.2
   vfxTrail: {fileID: 1024710919015754792, guid: b4cdf917601af554e9d58e80700970d8, type: 3}
   baseRayData:
-    bounceCount: 398
+    bounceCount: 3
     damage: 3
     speed: 100
-    continuousTargetting: 0
+    continuousTargetting: 1
     canBounce: 0
     hitEnemies: []
     hitReflectors: []

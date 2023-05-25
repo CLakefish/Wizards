@@ -74,6 +74,8 @@ public class Pistol : WeaponBase, IWeapon
             // Raycast to Mouse Input Position in world
             Ray ray = new Ray(transform.position, transform.rotation * Vector3.forward);
 
+
+
             // Trail rendering
             TrailRenderer trail = Instantiate(vfxTrail, transform.position, Camera.main.transform.rotation);
 
@@ -102,9 +104,9 @@ public class Pistol : WeaponBase, IWeapon
     // Issues with function:
     // Requires a cleanup script for the trail renderers
     // Have to tell if it has hit a target or not
-    // Bullets dont have data stored yet
     public IEnumerator RenderTrail(TrailRenderer trail, RaycastHit raycast, Vector3 point, Vector3 normal, RaycastData rayData, bool hit)
     {
+
         Vector3 startPos = trail.transform.position;
         Vector3 direction = (point - trail.transform.position).normalized;
 
@@ -128,59 +130,82 @@ public class Pistol : WeaponBase, IWeapon
             // Spawn Hit Object via Object Pooling
 
             if (raycast.collider.tag == "Reflect") rayData.findNearestTarget = true;
+            else rayData.bounceCount--;
 
             // Finding nearet
             if (rayData.findNearestTarget)
             {
-                Vector3 projectileDirection = Vector3.Reflect(direction, normal);
-
-                if (trail == null) yield break;
-
-                if (GameObject.FindGameObjectWithTag("Enemy") != null)
+                switch (rayData.bounceCount)
                 {
-                    List<GameObject> objs = new();
+                    // Every other case
+                    case (>= 1):
 
-                    foreach (GameObject obj in GameObject.FindGameObjectsWithTag("Enemy"))
-                    {
-                        if (rayData.hitEnemies.Contains(obj) == false)
+                        Vector3 projectileDirection = Vector3.Reflect(direction, normal);
+
+                        if (trail == null) yield break;
+
+                        if (GameObject.FindGameObjectWithTag("Enemy") != null)
                         {
+                            List<GameObject> objs = new();
 
-                            objs.Add(obj);
+                            foreach (GameObject obj in GameObject.FindGameObjectsWithTag("Enemy"))
+                            {
+                                if (rayData.hitEnemies.Contains(obj) == false)
+                                {
+
+                                    objs.Add(obj);
+                                }
+                            }
+
+                            foreach (GameObject obj in objs)
+                            {
+                                Debug.DrawRay(obj.transform.position, Vector3.up, Color.green, 2f);
+                            }
+
+                            GameObject nearestObject = null;
+
+                            if (objs.Count != 0)
+                            {
+                                nearestObject = PlayerUtilities.NearestObj(objs.ToArray(), trail.transform).gameObject;
+
+                                if (Vector3.Distance(nearestObject.transform.position, trail.transform.position) <= targetMaxDistance)
+                                {
+                                    projectileDirection = (nearestObject.transform.position - point).normalized;
+                                }
+                            }
+
+                            if (Physics.Raycast(point, projectileDirection, out RaycastHit h, Mathf.Infinity, hitLayer))
+                            {
+                                yield return new WaitForEndOfFrame();
+
+                                rayData.hitEnemies.Add(nearestObject);
+                                rayData.findNearestTarget = rayData.continuousTargetting;
+
+                                yield return StartCoroutine(RenderTrail(trail, h, (nearestObject != null) ? nearestObject.transform.position : h.point, h.normal, rayData, true));
+                            }
+                            else
+                            {
+                                yield return new WaitForEndOfFrame();
+
+                                yield return StartCoroutine(RenderTrail(trail, h, projectileDirection * hitCorrection, Vector3.zero, rayData, false));
+                            }
                         }
-                    }
 
-                    foreach (GameObject obj in objs)
-                    {
-                        Debug.DrawRay(obj.transform.position, Vector3.up, Color.green, 2f);
-                    }
+                        break;
 
-                    GameObject nearestObject = null;
+                    // Death Case
+                    case (<= 0):
 
-                    if (objs.Count != 0)
-                    {
-                        nearestObject = PlayerUtilities.NearestObj(objs.ToArray(), trail.transform).gameObject;
 
-                        if (Vector3.Distance(nearestObject.transform.position, trail.transform.position) <= targetMaxDistance)
+                        while (trail != null)
                         {
-                            projectileDirection = (nearestObject.transform.position - point).normalized;
+                            if (trail == null) yield break;
+
+                            trail.transform.position = point;
+                            yield return null;
                         }
-                    }
 
-                    if (Physics.Raycast(point, projectileDirection, out RaycastHit h, Mathf.Infinity, hitLayer))
-                    {
-                        yield return new WaitForEndOfFrame();
-
-                        rayData.hitEnemies.Add(nearestObject);
-                        rayData.findNearestTarget = rayData.continuousTargetting;
-
-                        yield return StartCoroutine(RenderTrail(trail, h, (nearestObject != null) ? nearestObject.transform.position : h.point, h.normal, rayData, true));
-                    }
-                    else
-                    {
-                        yield return new WaitForEndOfFrame();
-
-                        yield return StartCoroutine(RenderTrail(trail, h, projectileDirection * hitCorrection, Vector3.zero, rayData, false));
-                    }
+                        break;
                 }
             }
 
@@ -189,7 +214,6 @@ public class Pistol : WeaponBase, IWeapon
             if (rayData.canBounce)
             {
                 // Data for bounce
-                if (raycast.collider.tag != "Reflect") rayData.bounceCount--;
 
                 // Since bouncing has a different way of functioning with finding the nearest target, you have to define it specifically. Which is dumb af but since it doesn't take much to process idc
                 // Reflected direction
